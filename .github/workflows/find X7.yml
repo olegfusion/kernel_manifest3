@@ -1,0 +1,229 @@
+name: neo7
+on:
+  workflow_dispatch:
+    inputs:
+      KERNEL_SUFFIX:
+        description: '内核名称修改(默认官方名称可中文、emoji)'
+        required: true
+        default: '-android14-8-g013ec21bba94-abogki383916444-4k'
+      KERNEL_TIME:
+       description: "内核构建日期更改(默认官核构建时间)"
+       required: true
+       default: 'Tue Dec 17 23:36:49 UTC 2024'
+      suki_branch:
+        description: "选择SukiSU分支(Stable=稳定版, Dev=测试版)"
+        required: true
+        default: 'stable'
+        type: choice
+        options:
+          - main
+          
+      enable_feature_x:
+       description: "是否启用kpm"
+       required: false
+       default: true
+       type: boolean
+      enable_feature_y:
+       description: "是否启用lz4kd"
+       required: false
+       default: true
+       type: boolean
+
+      
+       
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CCACHE_DIR: /home/runner/.ccache  
+      CCACHE_MAXSIZE: 8G
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          temp-reserve-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          
+      - name: Configure Git
+        run: |
+         git config --global user.name "Futaba"
+         git config --global user.email "3199167602@qq.com"
+
+      - name: Install dependencies
+        run: |
+          sudo apt update && sudo apt upgrade -y
+          sudo apt install -y python3 git curl
+          sudo apt install -y python3 git curl ccache
+
+      - name: Restore ccache
+        uses: actions/cache@v3
+        with:
+          path: /home/runner/.ccache
+          key: ccache-${{ runner.os }}-${{ github.ref }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+
+      - name: Install repo tool
+        run: |
+         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/repo
+         chmod a+x ~/repo
+         sudo mv ~/repo /usr/local/bin/repo
+
+      - name: Initialize repo and sync
+        run: |
+         mkdir kernel_workspace && cd kernel_workspace
+         repo init -u https://github.com/tryle17/kernel_manifest3.git -b realme/sm8750 -m x7.xml --depth=1
+         repo --trace sync -c -j$(nproc --all) --no-tags
+         rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
+         rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
+         
+      - name: Set up SukiSU
+        run: |
+         cd kernel_workspace/kernel_platform
+         curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-${{ github.event.inputs.suki_branch }}
+         cd ./KernelSU
+         KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 10606)
+         echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+         export KSU_VERSION=$KSU_VERSION
+         sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+      
+        
+      - name: Set up susfs
+        run: |
+           cd kernel_workspace
+           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1
+           git clone https://github.com/ShirkNeko/SukiSU_patch.git
+
+           cd kernel_platform        
+           cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch ./common/
+           cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
+           cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
+           #lz4k
+           cp -r ../SukiSU_patch/other/zram/lz4k/include/linux/* ./common/include/linux
+           cp -r ../SukiSU_patch/other/zram/lz4k/lib/* ./common/lib
+           cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
+           # Apply patches
+           cd ./common
+
+           patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch || true
+           cp ../../SukiSU_patch/hooks/syscall_hooks.patch ./
+           patch -p1 -F 3 < syscall_hooks.patch
+           echo "完成"
+      
+
+      - name: Apply Hide Stuff Patches
+        run: |
+          cd kernel_workspace/kernel_platform/common
+          cp ../../SukiSU_patch/69_hide_stuff.patch ./
+          echo "正在打隐藏应用补丁"
+          patch -p1 -F 3 < 69_hide_stuff.patch
+ 
+      - name: Apply lz4kd Patches
+        if: ${{inputs.enable_feature_y }}
+        run: |
+          cd kernel_workspace/kernel_platform/common
+            cp ../../SukiSU_patch/other/zram/zram_patch/6.1/lz4kd.patch ./
+            patch -p1 -F 3 < lz4kd.patch || true
+           
+      - name: Add SUSFS Configuration Settings
+        run: |
+          cd kernel_workspace/kernel_platform
+          echo "CONFIG_KSU=y" >> ./common/arch/arm64/configs/gki_defconfig
+
+          # Add VFS configuration settings
+          echo "CONFIG_KSU_SUSFS_SUS_SU=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_MANUAL_HOOK=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          # Add SUSFS configuration settings
+          echo "CONFIG_KSU_SUSFS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y" >> ./common/arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> ./common/arch/arm64/configs/gki_defconfig
+          
+          if [[ "${{ inputs.enable_feature_y }}" == "true" ]]; then
+            echo "CONFIG_ZSMALLOC=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_CRYPTO_LZ4HC=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_CRYPTO_LZ4K=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_CRYPTO_LZ4KD=y" >> ./common/arch/arm64/configs/gki_defconfig
+            echo "CONFIG_CRYPTO_842=y" >> ./common/arch/arm64/configs/gki_defconfig
+            # 以下配置未核实必要性，待测试
+            #echo "CONFIG_ZRAM_WRITEBACK=y" >> ./common/arch/arm64/configs/gki_defconfig
+            #sed -i 's/CONFIG_ZRAM=m/CONFIG_ZRAM=y/g' ./common/arch/arm64/configs/gki_defconfig
+            #sed -i 's/CONFIG_MODULE_SIG=y/CONFIG_MODULE_SIG=n/g' ./common/arch/arm64/configs/gki_defconfig
+            else
+              echo ">>> 跳过 LZ4KD 相关配置"
+          fi
+          
+          #Remove check_defconfig
+          sudo sed -i 's/check_defconfig//' ./common/build.config.gki
+          cd common
+          git add -A && git commit -a -m "BUILD Kernel"
+          
+      - name: Add make name
+        run: |
+         cd kernel_workspace/kernel_platform
+         sed -i 's/${scm_version}//' ./common/scripts/setlocalversion
+         sudo sed -i 's/-4k/${{ github.event.inputs.KERNEL_SUFFIX }}/g' ./common/arch/arm64/configs/gki_defconfig
+
+         
+      - name: Add KPM Configuration Settings
+        if: ${{inputs.enable_feature_x }}
+        run: |
+          cd kernel_workspace/kernel_platform
+          echo "CONFIG_KPM=y" >> ./common/arch/arm64/configs/gki_defconfig
+         
+          #Remove check_defconfig
+          sudo sed -i 's/check_defconfig//' ./common/build.config.gki
+          cd common
+          git add -A && git commit -a -m "BUILD Kernel"
+
+
+      - name: Build Kernel
+        run: |
+          export PATH="$GITHUB_WORKSPACE/kernel_workspace/kernel_platform/prebuilts/clang/host/linux-x86/clang-r487747c/bin:$PATH"
+          export PATH="/usr/lib/ccache:$PATH"
+          sudo apt install libelf-dev
+          cd kernel_workspace/kernel_platform/common
+          make -j$(nproc --all) LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=clang  PAHOLE=../../prebuilts/kernel-build-tools/linux-x86/bin/pahole LD=ld.lld  HOSTLD=ld.lld O=out  gki_defconfig all
+          
+      - name: Apply Linux Patch
+        run: |
+         cd kernel_workspace/kernel_platform/common/out/arch/arm64/boot
+         curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.11-beta/patch_linux
+         chmod +x patch_linux
+         ./patch_linux
+         rm -f Image
+         mv oImage Image
+         
+      - name: Make AnyKernel3
+        run: |
+         git clone https://github.com/Kernel-SU/AnyKernel3.git --depth=1      
+         rm -rf ./AnyKernel3/.git
+         rm -rf ./AnyKernel3/push.sh
+         cp kernel_workspace/kernel_platform/common/out/arch/arm64/boot/Image ./AnyKernel3/
+
+      - name: Upload AnyKernel3
+        uses: actions/upload-artifact@v4
+        with:
+         name: AnyKernel3_${{ env.KSUVER }}_find_x7_SuKiSu
+         path: ./AnyKernel3/*
