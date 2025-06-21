@@ -1,4 +1,4 @@
-name: neo7
+name: find_x7
 on:
   workflow_dispatch:
     inputs:
