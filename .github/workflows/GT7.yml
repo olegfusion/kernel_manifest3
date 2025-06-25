@@ -86,7 +86,7 @@ jobs:
       - name: Initialize repo and sync
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://github.com/tryle17/kernel_manifest3.git -b realme/sm8750 -m 13t.xml --depth=1
+         repo init -u https://github.com/tryle17/kernel_manifest3.git -b realme/sm8750 -m MT6991.xml --depth=1
          repo --trace sync -c -j$(nproc --all) --no-tags
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
@@ -314,5 +314,5 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: AnyKernel3_${{ env.KSUVER }}_realme_gt7_SuKiSu_Stable
+         name: AnyKernel3_3.1.6_realme_gt7_SuKiSu_Stable
          path: ./AnyKernel3/*
