@@ -101,6 +101,7 @@ jobs:
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1
+           cd susfs4ksu && git checkout 5e2be6db3b38fb38de801c5521c18244461ce62e && cd ..
            git clone https://github.com/ShirkNeko/SukiSU_patch.git
 
            cd kernel_platform        
