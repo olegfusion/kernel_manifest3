@@ -119,10 +119,7 @@ jobs:
            cp -r ../SukiSU_patch/other/zram/lz4k/crypto/* ./common/crypto
            # Apply patches
            cd ./common
-           sed -i '/define get_ksu_version_full/,/endef/ c\
-           define get_ksu_version_full\
-           v$1-$(shell cd $(srctree)/$(src); $(GIT_BIN) rev-parse --short=8 HEAD)@CoolApk@xiaohu\
-           endef' drivers/kernelsu/Makefile
+
 
 
            patch -p1 < 50_add_susfs_in_gki-android14-6.1.patch || true
