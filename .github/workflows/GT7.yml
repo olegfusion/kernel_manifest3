@@ -121,10 +121,7 @@ jobs:
            fi
            # Apply patches
            cd ./common
-           sed -i '/define get_ksu_version_full/,/endef/ c\
-           define get_ksu_version_full\
-           v$1-$(shell cd $(srctree)/$(src); $(GIT_BIN) rev-parse --short=8 HEAD)@CoolApk@xiaohu\
-           endef' drivers/kernelsu/Makefile
+
 
 
            sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-android15-6.6.patch
