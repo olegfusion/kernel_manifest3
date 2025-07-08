@@ -300,7 +300,7 @@ jobs:
         if: ${{inputs.enable_feature_x }}
         run: |
          cd kernel_workspace/kernel_platform/common/out/arch/arm64/boot/
-         curl -LO https://github.com/ShirkNeko/SukiSU_KernelPatch_patch/releases/download/0.11-beta/patch_linux
+         curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch_linux
          chmod +x patch_linux
          ./patch_linux
          rm -f Image
