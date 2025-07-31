@@ -7,6 +7,6 @@
   <project remote="origin" name="android_kernel_oneplus_mt6989" path="kernel_platform/common" revision="oneplus/mt6989_v_15.0.2_ace5_race" clone-depth="1">
     <linkfile dest="kernel_platform/.source_date_epoch_dir" src="."/>
   </project>
-  <project remote="origin" name="android_kernel_modules_and_devicetree_oneplus_mt6989" path="kernel_platform" revision="oneplus/mt6989_v_15.0.2_ace5_race" clone-depth="1" />
+  <project remote="origin" name="android_kernel_modules_and_devicetree_oneplus_mt6989" path="kernel_platform" revision="oneplus/mt6989_v_15.0.2_ace5_race" clone-depth="1" >
   </project>
 </manifest>
